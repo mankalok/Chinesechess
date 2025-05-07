@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中國象棋模擬器 (電腦對戰版)</title>
+    <style>
+        body {
+            font-family: 'Arial', 'Microsoft YaHei', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+            color: #333;
+        }
+
+        .game-container {
+            text-align: center;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.2);
+            max-width: 700px;
+        }
+
+        h1 {
+            color: #444;
+        }
+
+        #status-display {
+            font-size: 1.5em;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        #check-status-display {
+            font-size: 1.2em;
+            margin-bottom: 15px;
+            color: #d9534f;
+            min-height: 1.2em;
+        }
+
+        :root {
+            --cell-size: 55px;
+            --piece-size: 50px;
+            --board-width: calc(var(--cell-size) * 8);
+            --board-height: calc(var(--cell-size) * 9);
+            --board-line-color: #80502c;
+            --board-bg-color: #f3d19c;
+        }
+
+        #board-wrapper {
+            display: inline-block;
+            position: relative;
+            margin-top: 10px;
+            border: 3px solid #502805;
+            background-color: var(--board-bg-color);
+            padding: calc(var(--cell-size) / 2);
+        }
+
+        #board-surface {
+            width: var(--board-width);
+            height: var(--board-height);
+            position: relative;
+            cursor: pointer;
+            background-image:
+                repeating-linear-gradient(to right, var(--board-line-color) 0, var(--board-line-color) 1px, transparent 1px, transparent var(--cell-size)),
+                repeating-linear-gradient(to bottom, var(--board-line-color) 0, var(--board-line-color) 1px, transparent 1px, transparent var(--cell-size)),
+                linear-gradient(to right, var(--board-line-color) 0, var(--board-line-color) 1px, transparent 1px, transparent calc(var(--board-width) - 1px), var(--board-line-color) calc(var(--board-width) - 1px), var(--board-line-color) var(--board-width) ),
+                linear-gradient(to bottom, var(--board-line-color) 0, var(--board-line-color) 1px, transparent 1px, transparent calc(var(--board-height) - 1px), var(--board-line-color) calc(var(--board-height) - 1px), var(--board-line-color) var(--board-height) );
+            background-size:
+                var(--cell-size) var(--cell-size),
+                var(--cell-size) var(--cell-size),
+                100% 100%,
+                100% 100%;
+            background-position: 0 0, 0 0;
+            background-color: var(--board-bg-color);
+        }
+
+        #board-wrapper::before {
+            content: "楚 河";
+            position: absolute;
+            top: 50%;
+            left: calc(var(--cell-size) * 1.5);
+            transform: translate(-50%, -50%) rotate(-90deg);
+            font-size: calc(var(--cell-size) * 0.4);
+            color: #555;
+            letter-spacing: calc(var(--cell-size) * 0.15);
+            font-weight: normal;
+            z-index: 0;
+        }
+
+        #board-wrapper::after {
+            content: "漢 界";
+            position: absolute;
+            top: 50%;
+            right: calc(var(--cell-size) * 1.0);
+            transform: translate(50%, -50%) rotate(90deg);
+            font-size: calc(var(--cell-size) * 0.4);
+            color: #555;
+            letter-spacing: calc(var(--cell-size) * 0.15);
+            font-weight: normal;
+            z-index: 0;
+        }
+        .river-line {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: calc(var(--cell-size) * 4 + var(--cell-size)/2 - 1px);
+            height: 3px;
+            background-color: #333;
+            z-index: 0;
+        }
+
+        .palace-line {
+            position: absolute;
+            background-color: var(--board-line-color);
+            height: 1px;
+            transform-origin: 0 0;
+            z-index: 0;
+        }
+
+        .piece-container {
+            position: absolute;
+            width: var(--piece-size);
+            height: var(--piece-size);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 50%;
+            font-size: calc(var(--piece-size) * 0.65);
+            font-weight: bold;
+            box-shadow: 0px 1px 3px rgba(0,0,0,0.5);
+            z-index: 1;
+            transform: translate(-50%, -50%);
+            box-sizing: border-box;
+        }
+
+        .red-piece {
+            color: white;
+            background-color: #c00;
+            border: 2px solid #800;
+        }
+
+        .black-piece {
+            color: white;
+            background-color: #333;
+            border: 2px solid #000;
+        }
+
+        .selected {
+            outline: 3px solid gold !important;
+            outline-offset: -3px;
+            box-shadow: 0 0 10px gold;
+            z-index: 2;
+        }
+
+        .valid-move-marker {
+            position: absolute;
+            width: calc(var(--piece-size) * 0.3);
+            height: calc(var(--piece-size) * 0.3);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .valid-move-dot {
+            background-color: rgba(0, 255, 0, 0.6);
+        }
+
+        .capture-move-dot {
+            border: 3px dashed rgba(255, 100, 100, 0.8);
+            width: calc(var(--piece-size) * 0.9);
+            height: calc(var(--piece-size) * 0.9);
+            box-sizing: border-box;
+        }
+
+        #reset-button {
+            margin-top: 10px; /* Reduced margin due to difficulty selector */
+            padding: 12px 25px;
+            font-size: 1.1em;
+            cursor: pointer;
+            background-color: #5cb85c;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+
+        #reset-button:hover {
+            background-color: #4cae4c;
+        }
+
+        #winner-display {
+            font-size: 2em;
+            font-weight: bold;
+            margin-top: 20px;
+            color: green;
+        }
+        .controls { /* Container for selectors and button */
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px; /* Space between control items */
+        }
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .control-group label {
+             white-space: nowrap; /* Prevent label from wrapping */
+        }
+
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>中國象棋模擬器 (電腦對戰版)</h1>
+        <div id="status-display">紅方回合</div>
+        <div id="check-status-display"></div>
+        <div id="board-wrapper">
+            <div id="board-surface">
+                 <div class="river-line"></div>
+            </div>
+        </div>
+        <div id="winner-display"></div>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="computer-color">電腦執:</label>
+                <select id="computer-color">
+                    <option value="black" selected>黑棋</option>
+                    <option value="red">紅棋</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label for="difficulty">電腦級數:</label>
+                <select id="difficulty">
+                    <option value="0">0 (隨機)</option>
+                    <option value="1" selected>1 (貪心)</option>
+                    <option value="2">2 (思考1回)</option> <!-- 1回 = 2 ply -->
+                    <option value="3">3 (思考2回 - 慢)</option> <!-- 2回 = 4 ply -->
+                </select>
+            </div>
+            <button id="reset-button">重新開始</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const boardSurface = document.getElementById('board-surface');
+            const statusDisplay = document.getElementById('status-display');
+            const checkStatusDisplay = document.getElementById('check-status-display');
+            const winnerDisplay = document.getElementById('winner-display');
+            const resetButton = document.getElementById('reset-button');
+            const difficultySelectorEl = document.getElementById('difficulty');
+            const computerColorSelectorEl = document.getElementById('computer-color');
+
+
+            const ROWS = 10;
+            const COLS = 9;
+            const CELL_SIZE = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cell-size'));
+
+            const PIECES = {
+                KING: { red: '帥', black: '將' },
+                ADVISOR: { red: '仕', black: '士' },
+                ELEPHANT: { red: '相', black: '象' },
+                HORSE: { red: '傌', black: '馬' },
+                ROOK: { red: '俥', black: '車' },
+                CANNON: { red: '炮', black: '砲' },
+                PAWN: { red: '兵', black: '卒' }
+            };
+
+            const initialBoardSetup = [
+                [{t:PIECES.ROOK.black, c:'black'}, {t:PIECES.HORSE.black, c:'black'}, {t:PIECES.ELEPHANT.black, c:'black'}, {t:PIECES.ADVISOR.black, c:'black'}, {t:PIECES.KING.black, c:'black'}, {t:PIECES.ADVISOR.black, c:'black'}, {t:PIECES.ELEPHANT.black, c:'black'}, {t:PIECES.HORSE.black, c:'black'}, {t:PIECES.ROOK.black, c:'black'}],
+                [null, null, null, null, null, null, null, null, null],
+                [null, {t:PIECES.CANNON.black, c:'black'}, null, null, null, null, null, {t:PIECES.CANNON.black, c:'black'}, null],
+                [{t:PIECES.PAWN.black, c:'black'}, null, {t:PIECES.PAWN.black, c:'black'}, null, {t:PIECES.PAWN.black, c:'black'}, null, {t:PIECES.PAWN.black, c:'black'}, null, {t:PIECES.PAWN.black, c:'black'}],
+                [null, null, null, null, null, null, null, null, null],
+                [null, null, null, null, null, null, null, null, null],
+                [{t:PIECES.PAWN.red, c:'red'}, null, {t:PIECES.PAWN.red, c:'red'}, null, {t:PIECES.PAWN.red, c:'red'}, null, {t:PIECES.PAWN.red, c:'red'}, null, {t:PIECES.PAWN.red, c:'red'}],
+                [null, {t:PIECES.CANNON.red, c:'red'}, null, null, null, null, null, {t:PIECES.CANNON.red, c:'red'}, null],
+                [null, null, null, null, null, null, null, null, null],
+                [{t:PIECES.ROOK.red, c:'red'}, {t:PIECES.HORSE.red, c:'red'}, {t:PIECES.ELEPHANT.red, c:'red'}, {t:PIECES.ADVISOR.red, c:'red'}, {t:PIECES.KING.red, c:'red'}, {t:PIECES.ADVISOR.red, c:'red'}, {t:PIECES.ELEPHANT.red, c:'red'}, {t:PIECES.HORSE.red, c:'red'}, {t:PIECES.ROOK.red, c:'red'}]
+            ];
+
+            let board = [];
+            let selectedPieceInfo = null;
+            let isRedTurn = true;
+            let gameOver = false;
+
+            let computerPlayerColor = 'black';
+            let computerDifficulty = 1;
+
+
+            function deepCloneBoard(boardToClone) {
+                return boardToClone.map(row => row.map(piece => piece ? {...piece} : null));
+            }
+
+            function intersectionToPixel(r, c) {
+                const x = c * CELL_SIZE;
+                const y = r * CELL_SIZE;
+                return { x, y };
+            }
+
+            function pixelToIntersection(pixelX, pixelY) {
+                const r = Math.round(pixelY / CELL_SIZE);
+                const c = Math.round(pixelX / CELL_SIZE);
+                const R = Math.min(ROWS - 1, Math.max(0, r));
+                const C = Math.min(COLS - 1, Math.max(0, c));
+                return { r:R, c:C };
+            }
+
+            function drawPalaceLines() {
+                boardSurface.querySelectorAll('.palace-line').forEach(el => el.remove());
+                const palaceCoords = [
+                    { r1: 0, c1: 3, r2: 2, c2: 5 }, { r1: 0, c1: 5, r2: 2, c2: 3 },
+                    { r1: 7, c1: 3, r2: 9, c2: 5 }, { r1: 7, c1: 5, r2: 9, c2: 3 },
+                ];
+                palaceCoords.forEach(coords => {
+                    const p1 = intersectionToPixel(coords.r1, coords.c1);
+                    const p2 = intersectionToPixel(coords.r2, coords.c2);
+                    const line = document.createElement('div');
+                    line.className = 'palace-line';
+                    const length = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+                    const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x) * 180 / Math.PI;
+                    line.style.width = `${length}px`;
+                    line.style.left = `${p1.x}px`;
+                    line.style.top = `${p1.y}px`;
+                    line.style.transform = `rotate(${angle}deg)`;
+                    boardSurface.appendChild(line);
+                });
+            }
+
+            function renderBoard() {
+                boardSurface.querySelectorAll('.piece-container, .valid-move-marker').forEach(el => el.remove());
+                for (let r = 0; r < ROWS; r++) {
+                    for (let c = 0; c < COLS; c++) {
+                        const piece = board[r][c];
+                        if (piece) {
+                            const pieceDiv = document.createElement('div');
+                            pieceDiv.className = `piece-container ${piece.color}-piece`;
+                            pieceDiv.textContent = piece.type;
+                            const { x, y } = intersectionToPixel(r, c);
+                            pieceDiv.style.left = `${x}px`;
+                            pieceDiv.style.top = `${y}px`;
+                            if (selectedPieceInfo && selectedPieceInfo.r === r && selectedPieceInfo.c === c) {
+                                pieceDiv.classList.add('selected');
+                            }
+                            boardSurface.appendChild(pieceDiv);
+                        }
+                    }
+                }
+                if (selectedPieceInfo && selectedPieceInfo.validMoves) {
+                    selectedPieceInfo.validMoves.forEach(move => {
+                        const markerDiv = document.createElement('div');
+                        markerDiv.className = `valid-move-marker ${move.isCapture ? 'capture-move-dot' : 'valid-move-dot'}`;
+                        const { x, y } = intersectionToPixel(move.r, move.c);
+                        markerDiv.style.left = `${x}px`;
+                        markerDiv.style.top = `${y}px`;
+                        boardSurface.appendChild(markerDiv);
+                    });
+                }
+            }
+
+            boardSurface.addEventListener('click', (event) => {
+                if (gameOver) return;
+                // Check if it's human player's turn
+                const humanIsRed = computerPlayerColor === 'black';
+                if ((humanIsRed && !isRedTurn) || (!humanIsRed && isRedTurn)) {
+                    // console.log("Not human player's turn.");
+                    return;
+                }
+
+                const rect = boardSurface.getBoundingClientRect();
+                const clickX = event.clientX - rect.left;
+                const clickY = event.clientY - rect.top;
+                const { r, c } = pixelToIntersection(clickX, clickY);
+                handleBoardClick(r, c);
+            });
+
+            function handleBoardClick(r, c) {
+                const clickedPiece = board[r][c];
+                const currentPlayerColor = isRedTurn ? 'red' : 'black';
+
+                if (selectedPieceInfo) {
+                    const { piece: currentSelectedPiece, r: fromR, c: fromC, validMoves } = selectedPieceInfo;
+                    const targetMove = validMoves.find(move => move.r === r && move.c === c);
+
+                    if (targetMove) {
+                        // tempBoard and self-check logic already in getValidMovesForPiece, so not strictly needed here again
+                        // but for direct king capture/checkmate validation, it's good practice.
+                        const tempBoardForFinalCheck = deepCloneBoard(board);
+                        tempBoardForFinalCheck[r][c] = currentSelectedPiece;
+                        tempBoardForFinalCheck[fromR][fromC] = null;
+                        if (isKingInCheck(currentSelectedPiece.color, tempBoardForFinalCheck)) {
+                             alert("無效移動：此移動會使己方將帥被將軍！(Error H01)"); // Should be caught by getValidMovesForPiece
+                             selectedPieceInfo = null; // Deselect
+                             renderBoard();
+                             return;
+                        }
+
+                        const capturedPiece = board[r][c];
+                        board[r][c] = currentSelectedPiece;
+                        board[fromR][fromC] = null;
+
+                        selectedPieceInfo = null;
+                        isRedTurn = !isRedTurn;
+                        renderBoard();
+                        updateStatus();
+                        checkForWinner(capturedPiece); // Check if king was captured
+                        checkAndDisplayKingStatus();    // Check for check/checkmate on new current player
+
+                        if (!gameOver && ((isRedTurn && computerPlayerColor === 'red') || (!isRedTurn && computerPlayerColor === 'black'))) {
+                            setTimeout(computerMove, 250); // Computer's turn
+                        }
+
+                    } else if (clickedPiece && clickedPiece.color === currentPlayerColor) {
+                        selectPiece(clickedPiece, r, c);
+                        renderBoard();
+                    } else {
+                        selectedPieceInfo = null;
+                        renderBoard();
+                    }
+                } else if (clickedPiece) {
+                    if (clickedPiece.color === currentPlayerColor) {
+                        selectPiece(clickedPiece, r, c);
+                        renderBoard();
+                    } else {
+                         alert("現在不是你的回合，或者你點擊了對方的棋子。");
+                    }
+                }
+            }
+
+            function selectPiece(piece, r, c) {
+                const validMoves = getValidMovesForPiece(piece, r, c, board);
+                selectedPieceInfo = { piece, r, c, validMoves };
+            }
+
+            function updateStatus() {
+                statusDisplay.textContent = isRedTurn ? '紅方回合' : '黑方回合';
+                statusDisplay.style.color = isRedTurn ? 'red' : 'black';
+            }
+
+            function checkAndDisplayKingStatus() {
+                if (gameOver) return;
+                const currentPlayerColor = isRedTurn ? 'red' : 'black';
+                const opponentPlayerColor = isRedTurn ? 'black' : 'red';
+
+                checkStatusDisplay.textContent = '';
+                if (isKingInCheck(currentPlayerColor, board)) {
+                    checkStatusDisplay.textContent = `${currentPlayerColor === 'red' ? '紅方' : '黑方'}被將軍！`;
+                    if (isCheckmate(currentPlayerColor, board)) {
+                        winnerDisplay.textContent = `${opponentPlayerColor === 'red' ? '紅方' : '黑方'}獲勝 (將死)！`;
+                        gameOver = true;
+                    }
+                } else {
+                    if (isStalemate(currentPlayerColor, board)) {
+                        winnerDisplay.textContent = `和棋 (困斃)！`;
+                        gameOver = true;
+                    }
+                }
+            }
+
+            function checkForWinner(capturedPiece) {
+                if (gameOver) return; // If already decided by checkmate/stalemate
+                if (capturedPiece && (capturedPiece.type === PIECES.KING.red || capturedPiece.type === PIECES.KING.black)) {
+                    winnerDisplay.textContent = `${isRedTurn ? '黑方' : '紅方'}獲勝 (擒王)！`; // Winner is the one whose turn it would be next
+                    gameOver = true;
+                }
+            }
+
+            function getPieceAt(r, c, currentBoard) {
+                if (r < 0 || r >= ROWS || c < 0 || c >= COLS) return undefined;
+                return currentBoard[r][c];
+            }
+
+            function isWithinPalace(r, c, color) {
+                if (color === 'red') { return r >= 7 && r <= 9 && c >= 3 && c <= 5; }
+                else { return r >= 0 && r <= 2 && c >= 3 && c <= 5; }
+            }
+            function isElephantInTerritory(r, color) {
+                if (color === 'red') return r >= 5; return r <= 4;
+            }
+            function countPiecesBetween(r1, c1, r2, c2, currentBoard) {
+                let count = 0;
+                if (r1 === r2) { for (let i = Math.min(c1, c2) + 1; i < Math.max(c1, c2); i++) { if (getPieceAt(r1, i, currentBoard)) count++; } }
+                else if (c1 === c2) { for (let i = Math.min(r1, r2) + 1; i < Math.max(r1, r2); i++) { if (getPieceAt(i, c1, currentBoard)) count++; } }
+                return count;
+            }
+
+            function getValidMovesForPiece(piece, r, c, currentBoard) {
+                const moves = []; const pieceType = piece.type; const color = piece.color;
+                function addMove(toR, toC) {
+                    if (toR < 0 || toR >= ROWS || toC < 0 || toC >= COLS) return;
+                    const targetPiece = getPieceAt(toR, toC, currentBoard);
+                    if (targetPiece && targetPiece.color === color) return;
+                    const tempBoard = deepCloneBoard(currentBoard);
+                    tempBoard[toR][toC] = piece; tempBoard[r][c] = null;
+                    if (isKingInCheck(color, tempBoard)) return;
+                    moves.push({ r: toR, c: toC, isCapture: !!targetPiece });
+                }
+                function addCannonMove(toR, toC, requiresJump, targetPieceForLogic) {
+                    if (toR < 0 || toR >= ROWS || toC < 0 || toC >= COLS) return;
+                    const actualTargetPiece = getPieceAt(toR, toC, currentBoard);
+                    if (actualTargetPiece && actualTargetPiece.color === color) return;
+                    if (requiresJump) { if (!targetPieceForLogic || targetPieceForLogic.color === color) return; }
+                    else { if (targetPieceForLogic) return; }
+                    const tempBoard = deepCloneBoard(currentBoard);
+                    tempBoard[toR][toC] = piece; tempBoard[r][c] = null;
+                    if (isKingInCheck(color, tempBoard)) return;
+                    moves.push({ r: toR, c: toC, isCapture: !!actualTargetPiece });
+                }
+
+                if (pieceType === PIECES.KING.red || pieceType === PIECES.KING.black) { [[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr,dc])=>{ const nr=r+dr,nc=c+dc; if(isWithinPalace(nr,nc,color))addMove(nr,nc);}); const oppC=(color==='red')?'black':'red'; const oppKp=findKing(oppC,currentBoard); if(oppKp&&oppKp.c===c&&countPiecesBetween(r,c,oppKp.r,oppKp.c,currentBoard)===0)addMove(oppKp.r,oppKp.c);}
+                else if (pieceType === PIECES.ADVISOR.red || pieceType === PIECES.ADVISOR.black) { [[-1,-1],[-1,1],[1,-1],[1,1]].forEach(([dr,dc])=>{ const nr=r+dr,nc=c+dc; if(isWithinPalace(nr,nc,color))addMove(nr,nc);});}
+                else if (pieceType === PIECES.ELEPHANT.red || pieceType === PIECES.ELEPHANT.black) { [[-2,-2],[-2,2],[2,-2],[2,2]].forEach(([dr,dc])=>{ const nr=r+dr,nc=c+dc,er=r+dr/2,ec=c+dc/2; if(isElephantInTerritory(nr,color)&&!getPieceAt(er,ec,currentBoard))addMove(nr,nc);});}
+                else if (pieceType === PIECES.HORSE.red || pieceType === PIECES.HORSE.black) { [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(([dr,dc])=>{ const nr=r+dr,nc=c+dc; let lr=r,lc=c; if(Math.abs(dr)===2)lr=r+dr/2;else lc=c+dc/2; if(!getPieceAt(lr,lc,currentBoard))addMove(nr,nc);});}
+                else if (pieceType === PIECES.ROOK.red || pieceType === PIECES.ROOK.black) { [[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr,dc])=>{for(let i=1;;i++){const nr=r+i*dr,nc=c+i*dc; if(nr<0||nr>=ROWS||nc<0||nc>=COLS)break; const t=getPieceAt(nr,nc,currentBoard); if(t){if(t.color!==color)addMove(nr,nc);break;}addMove(nr,nc);}}); }
+                else if (pieceType === PIECES.CANNON.red || pieceType === PIECES.CANNON.black) { [[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr,dc])=>{let j=false;for(let i=1;;i++){ const nr=r+i*dr,nc=c+i*dc; if(nr<0||nr>=ROWS||nc<0||nc>=COLS)break; const t=getPieceAt(nr,nc,currentBoard); if(!j){if(t)j=true;else addCannonMove(nr,nc,false,null);}else{if(t){addCannonMove(nr,nc,true,t);break;}}}});}
+                else if (pieceType === PIECES.PAWN.red || pieceType === PIECES.PAWN.black) { const fd=(color==='red')?-1:1; const cr=(color==='red'&&r<=4)||(color==='black'&&r>=5); addMove(r+fd,c); if(cr){addMove(r,c-1);addMove(r,c+1);}}
+                return moves;
+            }
+
+            function findKing(color, currentBoard) {
+                const kingType = (color === 'red') ? PIECES.KING.red : PIECES.KING.black;
+                for (let r_idx = 0; r_idx < ROWS; r_idx++) {
+                    for (let c_idx = 0; c_idx < COLS; c_idx++) {
+                        const piece = getPieceAt(r_idx,c_idx,currentBoard);
+                        if (piece && piece.type === kingType && piece.color === color) {
+                            return { r: r_idx, c: c_idx };
+                        }
+                    }
+                }
+                return null;
+            }
+
+            function isKingInCheck(kingColor, currentBoard) {
+                const kingPos = findKing(kingColor, currentBoard); if (!kingPos) return false;
+                const opponentColor = (kingColor === 'red') ? 'black' : 'red';
+                for (let r_idx = 0; r_idx < ROWS; r_idx++) {
+                    for (let c_idx = 0; c_idx < COLS; c_idx++) {
+                        const piece = getPieceAt(r_idx,c_idx,currentBoard);
+                        if (piece && piece.color === opponentColor) {
+                            const attackerMoves = getPotentialAttacksForPiece(piece, r_idx, c_idx, currentBoard);
+                            if (attackerMoves.some(move => move.r === kingPos.r && move.c === kingPos.c)) return true;
+                        }
+                    }
+                }
+                const otherKingPos = findKing(opponentColor, currentBoard);
+                if (kingPos && otherKingPos && kingPos.c === otherKingPos.c && countPiecesBetween(kingPos.r, kingPos.c, otherKingPos.r, otherKingPos.c, currentBoard) === 0) return true;
+                return false;
+            }
+
+            // !!! IMPORTANT: THIS FUNCTION NEEDS TO BE FULLY IMPLEMENTED FOR ALL PIECE TYPES !!!
+            // Based on getValidMovesForPiece, but without the self-check part.
+            function getPotentialAttacksForPiece(piece, r, c, currentBoard) {
+                const moves = []; const pieceType = piece.type; const color = piece.color;
+                function addPotentialAttack(toR, toC) {
+                    if (toR < 0 || toR >= ROWS || toC < 0 || toC >= COLS) return;
+                    const targetPiece = getPieceAt(toR, toC, currentBoard);
+                    if (targetPiece && targetPiece.color === color && pieceType !== PIECES.CANNON.red && pieceType !== PIECES.CANNON.black) {
+                        if (!(targetPiece.type === PIECES.KING.red || targetPiece.type === PIECES.KING.black)) return;
+                    }
+                    moves.push({ r: toR, c: toC });
+                }
+                if (pieceType === PIECES.ROOK.red || pieceType === PIECES.ROOK.black) { [[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr,dc])=>{for(let i=1;;i++){const nr=r+i*dr,nc=c+i*dc;if(nr<0||nr>=ROWS||nc<0||nc>=COLS)break;const t=getPieceAt(nr,nc,currentBoard);addPotentialAttack(nr,nc);if(t)break;}}); }
+                else if (pieceType === PIECES.CANNON.red || pieceType === PIECES.CANNON.black) { [[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr,dc])=>{let j=false;for(let i=1;;i++){const nr=r+i*dr,nc=c+i*dc;if(nr<0||nr>=ROWS||nc<0||nc>=COLS)break;const t=getPieceAt(nr,nc,currentBoard);if(!j){if(t)j=true;}else{if(t)addPotentialAttack(nr,nc);break;}}});}
+                else if (pieceType === PIECES.KING.red || pieceType === PIECES.KING.black) { [[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr,dc])=>{const nr=r+dr,nc=c+dc;if(isWithinPalace(nr,nc,color))addPotentialAttack(nr,nc);}); /* No flying general for simple attack check here, handled in isKingInCheck */}
+                else if (pieceType === PIECES.ADVISOR.red || pieceType === PIECES.ADVISOR.black) { [[-1,-1],[-1,1],[1,-1],[1,1]].forEach(([dr,dc])=>{const nr=r+dr,nc=c+dc;if(isWithinPalace(nr,nc,color))addPotentialAttack(nr,nc);});}
+                else if (pieceType === PIECES.ELEPHANT.red || pieceType === PIECES.ELEPHANT.black) { [[-2,-2],[-2,2],[2,-2],[2,2]].forEach(([dr,dc])=>{ const nr=r+dr,nc=c+dc,er=r+dr/2,ec=c+dc/2; if(isElephantInTerritory(nr,color)&&!getPieceAt(er,ec,currentBoard))addPotentialAttack(nr,nc);});}
+                else if (pieceType === PIECES.HORSE.red || pieceType === PIECES.HORSE.black) { [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(([dr,dc])=>{ const nr=r+dr,nc=c+dc; let lr=r,lc=c; if(Math.abs(dr)===2)lr=r+dr/2;else lc=c+dc/2; if(!getPieceAt(lr,lc,currentBoard))addPotentialAttack(nr,nc);});}
+                else if (pieceType === PIECES.PAWN.red || pieceType === PIECES.PAWN.black) { const fd=(color==='red')?-1:1; const cr=(color==='red'&&r<=4)||(color==='black'&&r>=5); addPotentialAttack(r+fd,c); if(cr){addPotentialAttack(r,c-1);addPotentialAttack(r,c+1);}}
+                return moves;
+            }
+
+            function isCheckmate(kingColor, currentBoard) {
+                if (!isKingInCheck(kingColor, currentBoard)) return false;
+                for (let r_idx = 0; r_idx < ROWS; r_idx++) {
+                    for (let c_idx = 0; c_idx < COLS; c_idx++) {
+                        const piece = getPieceAt(r_idx, c_idx, currentBoard);
+                        if (piece && piece.color === kingColor) {
+                            const validMoves = getValidMovesForPiece(piece, r_idx, c_idx, currentBoard);
+                            for (const move of validMoves) {
+                                const tempBoard = deepCloneBoard(currentBoard);
+                                tempBoard[move.r][move.c] = piece; tempBoard[r_idx][c_idx] = null;
+                                if (!isKingInCheck(kingColor, tempBoard)) return false;
+                            }
+                        }
+                    }
+                }
+                return true;
+            }
+            function isStalemate(playerColor, currentBoard) {
+                if (isKingInCheck(playerColor, currentBoard)) return false;
+                for (let r_idx = 0; r_idx < ROWS; r_idx++) {
+                    for (let c_idx = 0; c_idx < COLS; c_idx++) {
+                        const piece = getPieceAt(r_idx, c_idx, currentBoard);
+                        if (piece && piece.color === playerColor) {
+                            if (getValidMovesForPiece(piece, r_idx, c_idx, currentBoard).length > 0) return false;
+                        }
+                    }
+                }
+                return true;
+            }
+
+            // --- AI Logic ---
+            function computerMove() {
+                if (gameOver) return;
+                // console.log(`Computer (Level ${computerDifficulty}, Color: ${computerPlayerColor}) is thinking...`);
+                let bestMove = null;
+                const thinkingStartTime = Date.now();
+
+                if (computerDifficulty === 0) { bestMove = getRandomMove(computerPlayerColor); }
+                else if (computerDifficulty === 1) { bestMove = getGreedyMove(computerPlayerColor); }
+                else if (computerDifficulty >= 2) {
+                    let depth = (computerDifficulty - 1) * 2; // difficulty 2 -> 2 ply, difficulty 3 -> 4 ply
+                    bestMove = getMinimaxRootMove(computerPlayerColor, depth);
+                }
+
+                const thinkingTime = Date.now() - thinkingStartTime;
+                // console.log(`Computer thought for ${thinkingTime} ms`);
+
+                if (bestMove) {
+                    const { fromR, fromC, toR, toC, piece } = bestMove;
+                    // console.log(`Computer moves ${piece.type} from (${fromR},${fromC}) to (${toR},${toC})`);
+                    const capturedPiece = board[toR][toC];
+                    board[toR][toC] = piece; board[fromR][fromC] = null;
+                    isRedTurn = !isRedTurn;
+                    renderBoard(); updateStatus(); checkForWinner(capturedPiece); checkAndDisplayKingStatus();
+                } else {
+                    // console.log("Computer has no valid moves.");
+                    // This state should ideally be caught by checkAndDisplayKingStatus for the computer's turn BEFORE calling computerMove
+                    // But as a fallback:
+                    if (isKingInCheck(computerPlayerColor, board) && isCheckmate(computerPlayerColor, board)) {
+                         winnerDisplay.textContent = `${computerPlayerColor === 'red' ? '黑方' : '紅方'}獲勝 (電腦被將死)！`;
+                         gameOver = true;
+                    } else if (!isKingInCheck(computerPlayerColor, board) && isStalemate(computerPlayerColor, board)) {
+                        winnerDisplay.textContent = `和棋 (電腦困斃)！`;
+                        gameOver = true;
+                    }
+                }
+            }
+
+            function getAllPossibleMoves(playerColor, currentBoard) {
+                const allMoves = [];
+                for (let r = 0; r < ROWS; r++) {
+                    for (let c = 0; c < COLS; c++) {
+                        const piece = getPieceAt(r, c, currentBoard);
+                        if (piece && piece.color === playerColor) {
+                            const validMoves = getValidMovesForPiece(piece, r, c, currentBoard);
+                            validMoves.forEach(move => {
+                                allMoves.push({ fromR: r, fromC: c, toR: move.r, toC: move.c, piece: piece, isCapture: move.isCapture });
+                            });
+                        }
+                    }
+                }
+                return allMoves;
+            }
+
+            function getRandomMove(playerColor) {
+                const possibleMoves = getAllPossibleMoves(playerColor, board);
+                if (possibleMoves.length === 0) return null;
+                return possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+            }
+
+            const pieceValues = {
+                [PIECES.KING.red]: 20000, [PIECES.KING.black]: 20000,
+                [PIECES.ROOK.red]: 900, [PIECES.ROOK.black]: 900,
+                [PIECES.HORSE.red]: 400, [PIECES.HORSE.black]: 400,
+                [PIECES.CANNON.red]: 450, [PIECES.CANNON.black]: 450,
+                [PIECES.ELEPHANT.red]: 200, [PIECES.ELEPHANT.black]: 200,
+                [PIECES.ADVISOR.red]: 200, [PIECES.ADVISOR.black]: 200,
+                [PIECES.PAWN.red]: 100, [PIECES.PAWN.black]: 100,
+            };
+            function getPawnValue(pawn, r) {
+                let baseValue = pieceValues[pawn.type] || 100;
+                if (pawn.color === 'red' && r < 5) baseValue += 100; // Red pawn crossed river
+                if (pawn.color === 'black' && r > 4) baseValue += 100; // Black pawn crossed river
+                // Further refinement: value increases closer to promotion (though Xiangqi has no promotion)
+                // or closer to enemy king for advanced pawns.
+                if (pawn.color === 'red') { // Red moves up (index decreases)
+                    if (r <= 2) baseValue += (3-r) * 20; // Closer to back rank
+                } else { // Black moves down (index increases)
+                    if (r >= 7) baseValue += (r-6) * 20;
+                }
+                return baseValue;
+            }
+
+            // Positional values (example, highly tunable)
+            // Simplified: just some bonus/penalty based on piece type and general area
+            // For a real positional evaluation, each square would have a value for each piece type.
+            function getPositionalBonus(piece, r, c) {
+                let bonus = 0;
+                // Example: Central pawns are good, rooks on open files, horses in center
+                if (piece.type === PIECES.PAWN.red || piece.type === PIECES.PAWN.black) {
+                    if (c >=3 && c <= 5) bonus += 5; // Central pawns
+                } else if (piece.type === PIECES.HORSE.red || piece.type === PIECES.HORSE.black) {
+                    if (r >=2 && r <=7 && c >=2 && c <=6) bonus += 10; // Central horse
+                }
+                // Add more specific positional bonuses...
+                return bonus;
+            }
+
+
+            function evaluateBoard(currentBoard, playerColorToEvaluateFor) {
+                let totalScore = 0;
+                for (let r_idx = 0; r_idx < ROWS; r_idx++) {
+                    for (let c_idx = 0; c_idx < COLS; c_idx++) {
+                        const piece = getPieceAt(r_idx, c_idx, currentBoard);
+                        if (piece) {
+                            let value = 0;
+                            if (piece.type === PIECES.PAWN.red || piece.type === PIECES.PAWN.black) {
+                                value = getPawnValue(piece, r_idx);
+                            } else {
+                                value = pieceValues[piece.type] || 0;
+                            }
+                            value += getPositionalBonus(piece, r_idx, c_idx);
+
+
+                            if (piece.color === playerColorToEvaluateFor) {
+                                totalScore += value;
+                            } else {
+                                totalScore -= value;
+                            }
+                        }
+                    }
+                }
+                // Check for checkmate (huge score impact)
+                const opponentColor = (playerColorToEvaluateFor === 'red') ? 'black' : 'red';
+                if (isKingInCheck(opponentColor, currentBoard) && isCheckmate(opponentColor, currentBoard)) {
+                    totalScore += 10000; // Current player (evaluatingFor) delivered checkmate
+                }
+                if (isKingInCheck(playerColorToEvaluateFor, currentBoard) && isCheckmate(playerColorToEvaluateFor, currentBoard)) {
+                    totalScore -= 10000; // Current player is checkmated
+                }
+                return totalScore;
+            }
+
+            function getGreedyMove(playerColor) {
+                const possibleMoves = getAllPossibleMoves(playerColor, board);
+                if (possibleMoves.length === 0) return null;
+                let bestMove = null; let bestScore = -Infinity;
+                for (const move of possibleMoves) {
+                    const tempBoard = deepCloneBoard(board);
+                    const pieceToMove = getPieceAt(move.fromR, move.fromC, tempBoard); // Get the actual piece object
+                    const capturedP = getPieceAt(move.toR, move.toC, tempBoard); // Piece on target square
+
+                    tempBoard[move.toR][move.toC] = pieceToMove;
+                    tempBoard[move.fromR][move.fromC] = null;
+                    
+                    let currentMoveScore = evaluateBoard(tempBoard, playerColor);
+
+                    // Bonus for checkmate explicitly
+                    const opponentColor = (playerColor === 'red') ? 'black' : 'red';
+                    if(isKingInCheck(opponentColor, tempBoard) && isCheckmate(opponentColor, tempBoard)){
+                        currentMoveScore += pieceValues[PIECES.KING.red]; // A very large bonus
+                    }
+
+                    if (currentMoveScore > bestScore) {
+                        bestScore = currentMoveScore; bestMove = move;
+                    }
+                }
+                return bestMove || (possibleMoves.length > 0 ? possibleMoves[0] : null);
+            }
+
+            function minimax(currentBoard, depth, alpha, beta, isMaximizingPlayer, originalPlayerColor) {
+                if (depth === 0) {
+                    return { score: evaluateBoard(currentBoard, originalPlayerColor) };
+                }
+                const playerColorForThisTurn = isMaximizingPlayer ? originalPlayerColor : (originalPlayerColor === 'red' ? 'black' : 'red');
+                const possibleMoves = getAllPossibleMoves(playerColorForThisTurn, currentBoard);
+
+                if (possibleMoves.length === 0) {
+                    if (isKingInCheck(playerColorForThisTurn, currentBoard)) { return { score: isMaximizingPlayer ? -pieceValues[PIECES.KING.red] - depth : pieceValues[PIECES.KING.red] + depth }; } // Prefer faster checkmate
+                    else { return { score: 0 }; } // Stalemate
+                }
+
+                let bestVal;
+                if (isMaximizingPlayer) {
+                    bestVal = -Infinity;
+                    for (const move of possibleMoves) {
+                        const tempBoard = deepCloneBoard(currentBoard);
+                        const pieceToMove = getPieceAt(move.fromR, move.fromC, tempBoard);
+                        tempBoard[move.toR][move.toC] = pieceToMove; tempBoard[move.fromR][move.fromC] = null;
+                        const evalNode = minimax(tempBoard, depth - 1, alpha, beta, false, originalPlayerColor);
+                        bestVal = Math.max(bestVal, evalNode.score);
+                        alpha = Math.max(alpha, bestVal);
+                        if (beta <= alpha) break;
+                    }
+                } else {
+                    bestVal = Infinity;
+                    for (const move of possibleMoves) {
+                        const tempBoard = deepCloneBoard(currentBoard);
+                        const pieceToMove = getPieceAt(move.fromR, move.fromC, tempBoard);
+                        tempBoard[move.toR][move.toC] = pieceToMove; tempBoard[move.fromR][move.fromC] = null;
+                        const evalNode = minimax(tempBoard, depth - 1, alpha, beta, true, originalPlayerColor);
+                        bestVal = Math.min(bestVal, evalNode.score);
+                        beta = Math.min(beta, bestVal);
+                        if (beta <= alpha) break;
+                    }
+                }
+                return { score: bestVal };
+            }
+
+            function getMinimaxRootMove(playerColor, depth) {
+                if (depth <= 0) depth = 2;
+                // console.log(`Minimax root searching for ${playerColor} with depth (ply): ${depth}`);
+                const possibleMoves = getAllPossibleMoves(playerColor, board);
+                if (possibleMoves.length === 0) return null;
+
+                let bestMove = null;
+                let bestValue = -Infinity;
+                let alpha = -Infinity;
+                let beta = Infinity;
+
+                // Sort moves to improve alpha-beta pruning (e.g., captures first) - optional optimization
+                possibleMoves.sort((a,b) => {
+                    let scoreA = 0; let scoreB = 0;
+                    const capA = getPieceAt(a.toR, a.toC, board); if(capA) scoreA = pieceValues[capA.type] || 0;
+                    const capB = getPieceAt(b.toR, b.toC, board); if(capB) scoreB = pieceValues[capB.type] || 0;
+                    return scoreB - scoreA; // Higher capture value first
+                });
+
+
+                for (const move of possibleMoves) {
+                    const tempBoard = deepCloneBoard(board);
+                    const pieceToMove = getPieceAt(move.fromR, move.fromC, tempBoard);
+                    tempBoard[move.toR][move.toC] = pieceToMove;
+                    tempBoard[move.fromR][move.fromC] = null;
+
+                    const evalNode = minimax(tempBoard, depth - 1, alpha, beta, false, playerColor); // false since it's opponent's turn after this move
+                    // console.log(`Move: ${move.piece.type} ${move.fromR},${move.fromC} -> ${move.toR},${move.toC} evaluated to: ${evalNode.score}`);
+                    if (evalNode.score > bestValue) {
+                        bestValue = evalNode.score;
+                        bestMove = move;
+                    }
+                    alpha = Math.max(alpha, bestValue);
+                    // No beta check for root, we want the best score from all root options
+                }
+                // console.log("Minimax best move found with score:", bestValue, bestMove);
+                return bestMove || (possibleMoves.length > 0 ? possibleMoves[0] : null);
+            }
+
+
+            difficultySelectorEl.addEventListener('change', function() {
+                computerDifficulty = parseInt(this.value);
+                initializeBoard();
+            });
+            computerColorSelectorEl.addEventListener('change', function() {
+                computerPlayerColor = this.value;
+                initializeBoard();
+            });
+            resetButton.addEventListener('click', initializeBoard);
+
+            function initializeBoard() {
+                board = initialBoardSetup.map(row => row.map(p => p ? { type: p.t, color: p.c } : null));
+                isRedTurn = true;
+                selectedPieceInfo = null;
+                gameOver = false;
+                winnerDisplay.textContent = '';
+                checkStatusDisplay.textContent = '';
+
+                // Get latest settings from UI
+                computerPlayerColor = computerColorSelectorEl.value;
+                computerDifficulty = parseInt(difficultySelectorEl.value);
+
+
+                renderBoard();
+                updateStatus();
+                drawPalaceLines();
+
+                if (!gameOver && ((isRedTurn && computerPlayerColor === 'red') || (!isRedTurn && computerPlayerColor === 'black' && !isRedTurn))) {
+                     // If computer is red and it's red's turn OR computer is black and it's black's turn
+                    if( (isRedTurn && computerPlayerColor === 'red') || (!isRedTurn && computerPlayerColor === 'black') ){
+                         setTimeout(computerMove, 250);
+                    }
+                }
+            }
+            initializeBoard();
+        });
+    </script>
+</body>
+</html>
