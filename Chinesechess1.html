@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中國象棋模擬器 (交叉點版)</title>
+    <style>
+        body {
+            font-family: 'Arial', 'Microsoft YaHei', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+            color: #333;
+        }
+
+        .game-container {
+            text-align: center;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.2);
+            max-width: 700px; /* Adjusted for potential board size */
+        }
+
+        h1 {
+            color: #444;
+        }
+
+        #status-display {
+            font-size: 1.5em;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        #check-status-display {
+            font-size: 1.2em;
+            margin-bottom: 15px;
+            color: #d9534f;
+            min-height: 1.2em;
+        }
+
+        /* --- New Board Styling --- */
+        :root {
+            --cell-size: 55px; /* Size of one square in the grid */
+            --piece-size: 50px; /* Diameter of the piece */
+            --board-width: calc(var(--cell-size) * 8); /* 8 columns of squares */
+            --board-height: calc(var(--cell-size) * 9); /* 9 rows of squares */
+            --board-line-color: #80502c;
+            --board-bg-color: #f3d19c;
+        }
+
+        #board-wrapper { /* For centering and potential outer decorations */
+            display: inline-block;
+            position: relative;
+            margin-top: 10px;
+            border: 3px solid #502805; /* Outer frame */
+            background-color: var(--board-bg-color);
+            padding: calc(var(--cell-size) / 2); /* Padding to show lines at edges */
+        }
+
+        #board-surface {
+            width: var(--board-width);
+            height: var(--board-height);
+            position: relative;
+            cursor: pointer;
+            /* Drawing grid lines with background gradients */
+            background-image:
+                /* Vertical lines */
+                repeating-linear-gradient(to right, var(--board-line-color) 0, var(--board-line-color) 1px, transparent 1px, transparent var(--cell-size)),
+                /* Horizontal lines */
+                repeating-linear-gradient(to bottom, var(--board-line-color) 0, var(--board-line-color) 1px, transparent 1px, transparent var(--cell-size)),
+                /* Palace lines - these are harder with pure CSS gradients for diagonals */
+                /* Simpler approach: draw them with JS or separate elements if needed for precision */
+                /* Outer border lines (last lines) */
+                linear-gradient(to right, var(--board-line-color) 0, var(--board-line-color) 1px, transparent 1px, transparent calc(var(--board-width) - 1px), var(--board-line-color) calc(var(--board-width) - 1px), var(--board-line-color) var(--board-width) ),
+                linear-gradient(to bottom, var(--board-line-color) 0, var(--board-line-color) 1px, transparent 1px, transparent calc(var(--board-height) - 1px), var(--board-line-color) calc(var(--board-height) - 1px), var(--board-line-color) var(--board-height) );
+            background-size:
+                var(--cell-size) var(--cell-size),
+                var(--cell-size) var(--cell-size),
+                100% 100%,
+                100% 100%;
+            background-position:
+                0 0, /* Vertical lines start at left edge of squares */
+                0 0; /* Horizontal lines start at top edge of squares */
+             background-color: var(--board-bg-color); /* Fallback or underneath lines */
+        }
+
+        /* River (Visual only - CSS cannot easily break lines for it) */
+        #board-wrapper::before {
+            content: "楚 河";
+            position: absolute;
+            top: 50%;
+            left: calc(var(--cell-size) * 1.5);
+            transform: translate(-50%, -50%) rotate(-90deg);
+            font-size: calc(var(--cell-size) * 0.4);
+            color: #555;
+            letter-spacing: calc(var(--cell-size) * 0.15);
+            font-weight: normal;
+            z-index: 0; /* Behind pieces */
+        }
+
+        #board-wrapper::after {
+            content: "漢 界";
+            position: absolute;
+            top: 50%;
+            right: calc(var(--cell-size) * 1.0); /* Adjusted right position */
+            transform: translate(50%, -50%) rotate(90deg);
+            font-size: calc(var(--cell-size) * 0.4);
+            color: #555;
+            letter-spacing: calc(var(--cell-size) * 0.15);
+            font-weight: normal;
+            z-index: 0; /* Behind pieces */
+        }
+        /* River Line - a div overlay */
+        .river-line {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: calc(var(--cell-size) * 4 + var(--cell-size)/2 - 1px); /* Middle of the 5th row of squares */
+            height: 3px;
+            background-color: #333;
+            z-index: 0;
+        }
+
+        /* Palace lines (diagonal) - drawn with absolutely positioned divs for simplicity */
+        .palace-line {
+            position: absolute;
+            background-color: var(--board-line-color);
+            height: 1px; /* Or 2px for thicker */
+            transform-origin: 0 0;
+            z-index: 0;
+        }
+
+
+        .piece-container {
+            position: absolute;
+            width: var(--piece-size);
+            height: var(--piece-size);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 50%;
+            font-size: calc(var(--piece-size) * 0.65);
+            font-weight: bold;
+            box-shadow: 0px 1px 3px rgba(0,0,0,0.5);
+            z-index: 1;
+            /* Centering the piece on the intersection */
+            transform: translate(-50%, -50%);
+            box-sizing: border-box;
+        }
+
+        .red-piece {
+            color: white;
+            background-color: #c00;
+            border: 2px solid #800;
+        }
+
+        .black-piece {
+            color: white;
+            background-color: #333;
+            border: 2px solid #000;
+        }
+
+        .selected {
+            outline: 3px solid gold !important;
+            outline-offset: -3px; /* Pushes outline inwards */
+            box-shadow: 0 0 10px gold;
+            z-index: 2; /* Bring selected piece to front */
+        }
+
+        .valid-move-marker {
+            position: absolute;
+            width: calc(var(--piece-size) * 0.3);
+            height: calc(var(--piece-size) * 0.3);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 0; /* Behind pieces, on the lines */
+        }
+
+        .valid-move-dot {
+            background-color: rgba(0, 255, 0, 0.6);
+        }
+
+        .capture-move-dot {
+            border: 3px dashed rgba(255, 100, 100, 0.8);
+            width: calc(var(--piece-size) * 0.9); /* Larger for capture indication */
+            height: calc(var(--piece-size) * 0.9);
+            box-sizing: border-box;
+        }
+
+
+        #reset-button {
+            margin-top: 20px;
+            padding: 12px 25px;
+            font-size: 1.1em;
+            cursor: pointer;
+            background-color: #5cb85c;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+
+        #reset-button:hover {
+            background-color: #4cae4c;
+        }
+
+        #winner-display {
+            font-size: 2em;
+            font-weight: bold;
+            margin-top: 20px;
+            color: green;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>中國象棋模擬器 (交叉點版)</h1>
+        <div id="status-display">紅方回合</div>
+        <div id="check-status-display"></div>
+        <div id="board-wrapper">
+            <div id="board-surface">
+                <!-- Pieces and move markers will be appended here by JavaScript -->
+                 <div class="river-line"></div> <!-- Visual river line -->
+            </div>
+        </div>
+        <div id="winner-display"></div>
+        <button id="reset-button">重新開始</button>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const boardSurface = document.getElementById('board-surface');
+            const statusDisplay = document.getElementById('status-display');
+            const checkStatusDisplay = document.getElementById('check-status-display');
+            const winnerDisplay = document.getElementById('winner-display');
+            const resetButton = document.getElementById('reset-button');
+
+            const ROWS = 10; // Number of horizontal lines (0-9)
+            const COLS = 9;  // Number of vertical lines (0-8)
+
+            const CELL_SIZE = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cell-size'));
+
+            // Piece names for internal use. Red player uses '帥', '仕', etc. Black uses '將', '士', etc.
+            const PIECES = {
+                KING: { red: '帥', black: '將' },
+                ADVISOR: { red: '仕', black: '士' },
+                ELEPHANT: { red: '相', black: '象' },
+                HORSE: { red: '傌', black: '馬' },
+                ROOK: { red: '俥', black: '車' },
+                CANNON: { red: '炮', black: '砲' },
+                PAWN: { red: '兵', black: '卒' }
+            };
+
+             const initialBoardSetup = [
+                // type, color (b for black, r for red)
+                [{t:PIECES.ROOK.black, c:'black'}, {t:PIECES.HORSE.black, c:'black'}, {t:PIECES.ELEPHANT.black, c:'black'}, {t:PIECES.ADVISOR.black, c:'black'}, {t:PIECES.KING.black, c:'black'}, {t:PIECES.ADVISOR.black, c:'black'}, {t:PIECES.ELEPHANT.black, c:'black'}, {t:PIECES.HORSE.black, c:'black'}, {t:PIECES.ROOK.black, c:'black'}], // Row 0
+                [null, null, null, null, null, null, null, null, null], // Row 1
+                [null, {t:PIECES.CANNON.black, c:'black'}, null, null, null, null, null, {t:PIECES.CANNON.black, c:'black'}, null], // Row 2
+                [{t:PIECES.PAWN.black, c:'black'}, null, {t:PIECES.PAWN.black, c:'black'}, null, {t:PIECES.PAWN.black, c:'black'}, null, {t:PIECES.PAWN.black, c:'black'}, null, {t:PIECES.PAWN.black, c:'black'}], // Row 3
+                [null, null, null, null, null, null, null, null, null], // Row 4 (River boundary)
+                [null, null, null, null, null, null, null, null, null], // Row 5 (River boundary)
+                [{t:PIECES.PAWN.red, c:'red'}, null, {t:PIECES.PAWN.red, c:'red'}, null, {t:PIECES.PAWN.red, c:'red'}, null, {t:PIECES.PAWN.red, c:'red'}, null, {t:PIECES.PAWN.red, c:'red'}], // Row 6
+                [null, {t:PIECES.CANNON.red, c:'red'}, null, null, null, null, null, {t:PIECES.CANNON.red, c:'red'}, null], // Row 7
+                [null, null, null, null, null, null, null, null, null], // Row 8
+                [{t:PIECES.ROOK.red, c:'red'}, {t:PIECES.HORSE.red, c:'red'}, {t:PIECES.ELEPHANT.red, c:'red'}, {t:PIECES.ADVISOR.red, c:'red'}, {t:PIECES.KING.red, c:'red'}, {t:PIECES.ADVISOR.red, c:'red'}, {t:PIECES.ELEPHANT.red, c:'red'}, {t:PIECES.HORSE.red, c:'red'}, {t:PIECES.ROOK.red, c:'red'}]  // Row 9
+            ];
+
+
+            let board = []; // Stores piece objects {type, color}
+            let selectedPieceInfo = null; // { piece, r, c, validMoves: [] }
+            let isRedTurn = true;
+            let gameOver = false;
+
+            function deepCloneBoard(boardToClone) {
+                return boardToClone.map(row => row.map(piece => piece ? {...piece} : null));
+            }
+
+            function initializeBoard() {
+                board = initialBoardSetup.map(row =>
+                    row.map(p => p ? { type: p.t, color: p.c } : null)
+                );
+                isRedTurn = true;
+                selectedPieceInfo = null;
+                gameOver = false;
+                winnerDisplay.textContent = '';
+                checkStatusDisplay.textContent = '';
+                renderBoard();
+                updateStatus();
+                drawPalaceLines(); // Draw palace lines once
+            }
+
+            // Convert (r, c) intersection coordinates to pixel (x, y) for top-left of piece div
+            function intersectionToPixel(r, c) {
+                const x = c * CELL_SIZE;
+                const y = r * CELL_SIZE;
+                return { x, y };
+            }
+
+            // Convert pixel (x, y) from click event to board intersection (r, c)
+            function pixelToIntersection(pixelX, pixelY) {
+                // Find the closest intersection point
+                const r = Math.round(pixelY / CELL_SIZE);
+                const c = Math.round(pixelX / CELL_SIZE);
+
+                // Ensure it's within valid board bounds (0-9 for rows, 0-8 for cols)
+                const R = Math.min(ROWS - 1, Math.max(0, r));
+                const C = Math.min(COLS - 1, Math.max(0, c));
+                return { r:R, c:C };
+            }
+
+            function drawPalaceLines() {
+                // Remove old lines if any
+                boardSurface.querySelectorAll('.palace-line').forEach(el => el.remove());
+
+                const palaceCoords = [
+                    // Black Palace \
+                    { r1: 0, c1: 3, r2: 2, c2: 5 },
+                    // Black Palace /
+                    { r1: 0, c1: 5, r2: 2, c2: 3 },
+                    // Red Palace \
+                    { r1: 7, c1: 3, r2: 9, c2: 5 },
+                    // Red Palace /
+                    { r1: 7, c1: 5, r2: 9, c2: 3 },
+                ];
+
+                palaceCoords.forEach(coords => {
+                    const p1 = intersectionToPixel(coords.r1, coords.c1);
+                    const p2 = intersectionToPixel(coords.r2, coords.c2);
+
+                    const line = document.createElement('div');
+                    line.className = 'palace-line';
+                    const length = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+                    const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x) * 180 / Math.PI;
+
+                    line.style.width = `${length}px`;
+                    line.style.left = `${p1.x}px`;
+                    line.style.top = `${p1.y}px`;
+                    line.style.transform = `rotate(${angle}deg)`;
+                    boardSurface.appendChild(line);
+                });
+            }
+
+
+            function renderBoard() {
+                // Clear only pieces and markers, not the board surface itself or palace/river lines
+                boardSurface.querySelectorAll('.piece-container, .valid-move-marker').forEach(el => el.remove());
+
+                for (let r = 0; r < ROWS; r++) {
+                    for (let c = 0; c < COLS; c++) {
+                        const piece = board[r][c];
+                        if (piece) {
+                            const pieceDiv = document.createElement('div');
+                            pieceDiv.className = `piece-container ${piece.color}-piece`;
+                            pieceDiv.textContent = piece.type;
+
+                            const { x, y } = intersectionToPixel(r, c);
+                            pieceDiv.style.left = `${x}px`;
+                            pieceDiv.style.top = `${y}px`;
+
+                            if (selectedPieceInfo && selectedPieceInfo.r === r && selectedPieceInfo.c === c) {
+                                pieceDiv.classList.add('selected');
+                            }
+                            boardSurface.appendChild(pieceDiv);
+                        }
+                    }
+                }
+
+                // Draw valid move markers
+                if (selectedPieceInfo && selectedPieceInfo.validMoves) {
+                    selectedPieceInfo.validMoves.forEach(move => {
+                        const markerDiv = document.createElement('div');
+                        markerDiv.className = `valid-move-marker ${move.isCapture ? 'capture-move-dot' : 'valid-move-dot'}`;
+                        const { x, y } = intersectionToPixel(move.r, move.c);
+                        markerDiv.style.left = `${x}px`;
+                        markerDiv.style.top = `${y}px`;
+                        boardSurface.appendChild(markerDiv);
+                    });
+                }
+            }
+
+            boardSurface.addEventListener('click', (event) => {
+                if (gameOver) return;
+
+                const rect = boardSurface.getBoundingClientRect();
+                const clickX = event.clientX - rect.left;
+                const clickY = event.clientY - rect.top;
+
+                const { r, c } = pixelToIntersection(clickX, clickY);
+                handleBoardClick(r, c); // Renamed from onCellClick
+            });
+
+            function handleBoardClick(r, c) { // Was onCellClick
+                const clickedPiece = board[r][c];
+
+                if (selectedPieceInfo) {
+                    const { piece: currentSelectedPiece, r: fromR, c: fromC, validMoves } = selectedPieceInfo;
+                    const targetMove = validMoves.find(move => move.r === r && move.c === c);
+
+                    if (targetMove) {
+                        const tempBoard = deepCloneBoard(board);
+                        tempBoard[r][c] = currentSelectedPiece;
+                        tempBoard[fromR][fromC] = null;
+
+                        if (isKingInCheck(currentSelectedPiece.color, tempBoard)) {
+                            alert("無效移動：此移動會使己方將帥被將軍！");
+                            return;
+                        }
+
+                        const capturedPiece = board[r][c];
+                        board[r][c] = currentSelectedPiece;
+                        board[fromR][fromC] = null;
+
+                        selectedPieceInfo = null;
+                        isRedTurn = !isRedTurn;
+                        renderBoard();
+                        updateStatus();
+                        checkForWinner(capturedPiece);
+                        checkAndDisplayKingStatus();
+
+                    } else if (clickedPiece && clickedPiece.color === currentSelectedPiece.color) {
+                        selectPiece(clickedPiece, r, c);
+                        renderBoard();
+                    } else {
+                        selectedPieceInfo = null;
+                        renderBoard();
+                    }
+                } else if (clickedPiece) {
+                    if ((isRedTurn && clickedPiece.color === 'red') || (!isRedTurn && clickedPiece.color === 'black')) {
+                        selectPiece(clickedPiece, r, c);
+                        renderBoard();
+                    } else {
+                        alert("現在不是你的回合，或者你點擊了對方的棋子。");
+                    }
+                }
+            }
+
+            function selectPiece(piece, r, c) {
+                const validMoves = getValidMovesForPiece(piece, r, c, board);
+                selectedPieceInfo = { piece, r, c, validMoves };
+            }
+
+            function updateStatus() {
+                statusDisplay.textContent = isRedTurn ? '紅方回合' : '黑方回合';
+                statusDisplay.style.color = isRedTurn ? 'red' : 'black';
+            }
+
+             function checkAndDisplayKingStatus() {
+                if (gameOver) return;
+                const currentPlayerColor = isRedTurn ? 'red' : 'black';
+                const opponentColor = isRedTurn ? 'black' : 'red';
+
+                checkStatusDisplay.textContent = '';
+                if (isKingInCheck(currentPlayerColor, board)) {
+                    checkStatusDisplay.textContent = `${currentPlayerColor === 'red' ? '紅方' : '黑方'}被將軍！`;
+                    if (isCheckmate(currentPlayerColor, board)) {
+                        winnerDisplay.textContent = `${opponentColor === 'red' ? '紅方' : '黑方'}獲勝 (將死)！`;
+                        gameOver = true;
+                    }
+                } else {
+                    // Check for stalemate (simplified - no moves for current player, not in check)
+                    if (isStalemate(currentPlayerColor, board)) {
+                        winnerDisplay.textContent = `和棋 (困斃)！`;
+                        gameOver = true;
+                    }
+                }
+            }
+
+
+            function checkForWinner(capturedPiece) {
+                if (capturedPiece && (capturedPiece.type === PIECES.KING.red || capturedPiece.type === PIECES.KING.black)) {
+                    winnerDisplay.textContent = `${isRedTurn ? '黑方' : '紅方'}獲勝 (擒王)！`;
+                    gameOver = true;
+                }
+            }
+
+            // --- Movement Logic (largely the same as before, but using the global `board`) ---
+            function getPieceAt(r, c, currentBoard) {
+                if (r < 0 || r >= ROWS || c < 0 || c >= COLS) return undefined;
+                return currentBoard[r][c];
+            }
+
+            function isWithinPalace(r, c, color) {
+                if (color === 'red') { // Bottom palace for red
+                    return r >= 7 && r <= 9 && c >= 3 && c <= 5;
+                } else { // Top palace for black
+                    return r >= 0 && r <= 2 && c >= 3 && c <= 5;
+                }
+            }
+            function isElephantInTerritory(r, color) { // Elephants cannot cross the river
+                if (color === 'red') return r >= 5; // Red's side (rows 5-9)
+                return r <= 4; // Black's side (rows 0-4)
+            }
+            function countPiecesBetween(r1, c1, r2, c2, currentBoard) {
+                let count = 0;
+                if (r1 === r2) { // Horizontal
+                    for (let i = Math.min(c1, c2) + 1; i < Math.max(c1, c2); i++) {
+                        if (getPieceAt(r1, i, currentBoard)) count++;
+                    }
+                } else if (c1 === c2) { // Vertical
+                    for (let i = Math.min(r1, r2) + 1; i < Math.max(r1, r2); i++) {
+                        if (getPieceAt(i, c1, currentBoard)) count++;
+                    }
+                } // Diagonal (not typically needed for Xiangqi path counting except for complex rules)
+                return count;
+            }
+
+            function getValidMovesForPiece(piece, r, c, currentBoard) {
+                const moves = [];
+                const pieceType = piece.type;
+                const color = piece.color;
+
+                function addMove(toR, toC) {
+                    if (toR < 0 || toR >= ROWS || toC < 0 || toC >= COLS) return;
+                    const targetPiece = getPieceAt(toR, toC, currentBoard);
+                    if (targetPiece && targetPiece.color === color) return;
+
+                    const tempBoard = deepCloneBoard(currentBoard);
+                    tempBoard[toR][toC] = piece;
+                    tempBoard[r][c] = null;
+                    if (isKingInCheck(color, tempBoard)) {
+                        return;
+                    }
+                    moves.push({ r: toR, c: toC, isCapture: !!targetPiece });
+                }
+                function addCannonMove(toR, toC, requiresJump, targetPieceForLogic) {
+                    if (toR < 0 || toR >= ROWS || toC < 0 || toC >= COLS) return;
+                    const actualTargetPiece = getPieceAt(toR, toC, currentBoard);
+                     if (actualTargetPiece && actualTargetPiece.color === color) return;
+
+                    if (requiresJump) {
+                        if (!targetPieceForLogic || targetPieceForLogic.color === color) return;
+                    } else {
+                        if (targetPieceForLogic) return;
+                    }
+                    
+                    const tempBoard = deepCloneBoard(currentBoard);
+                    tempBoard[toR][toC] = piece;
+                    tempBoard[r][c] = null;
+                    if (isKingInCheck(color, tempBoard)) {
+                        return;
+                    }
+                    moves.push({ r: toR, c: toC, isCapture: !!actualTargetPiece });
+                }
+
+
+                if (pieceType === PIECES.KING.red || pieceType === PIECES.KING.black) {
+                    const kingMoves = [[-1,0], [1,0], [0,-1], [0,1]];
+                    kingMoves.forEach(([dr, dc]) => {
+                        const newR = r + dr;
+                        const newC = c + dc;
+                        if (isWithinPalace(newR, newC, color)) addMove(newR, newC);
+                    });
+                    // Flying general (simplified)
+                    const opponentColor = (color === 'red') ? 'black' : 'red';
+                    const opponentKingPos = findKing(opponentColor, currentBoard);
+                    if (opponentKingPos && opponentKingPos.c === c) { // Same column
+                        if (countPiecesBetween(r, c, opponentKingPos.r, opponentKingPos.c, currentBoard) === 0) {
+                           addMove(opponentKingPos.r, opponentKingPos.c);
+                        }
+                    }
+                }
+                else if (pieceType === PIECES.ADVISOR.red || pieceType === PIECES.ADVISOR.black) {
+                    const advisorMoves = [[-1,-1], [-1,1], [1,-1], [1,1]];
+                    advisorMoves.forEach(([dr, dc]) => {
+                        const newR = r + dr;
+                        const newC = c + dc;
+                        if (isWithinPalace(newR, newC, color)) addMove(newR, newC);
+                    });
+                }
+                else if (pieceType === PIECES.ELEPHANT.red || pieceType === PIECES.ELEPHANT.black) {
+                    const elephantMoves = [[-2,-2], [-2,2], [2,-2], [2,2]];
+                    elephantMoves.forEach(([dr, dc]) => {
+                        const newR = r + dr;
+                        const newC = c + dc;
+                        const eyeR = r + dr/2;
+                        const eyeC = c + dc/2;
+                        if (isElephantInTerritory(newR, color) && !getPieceAt(eyeR, eyeC, currentBoard)) {
+                            addMove(newR, newC);
+                        }
+                    });
+                }
+                else if (pieceType === PIECES.HORSE.red || pieceType === PIECES.HORSE.black) {
+                    const horseMoves = [
+                        [-2,-1], [-2,1], [-1,-2], [-1,2],
+                        [1,-2], [1,2], [2,-1], [2,1]
+                    ];
+                    horseMoves.forEach(([dr, dc]) => {
+                        const newR = r + dr;
+                        const newC = c + dc;
+                        let legR = r, legC = c;
+                        if (Math.abs(dr) === 2) legR = r + dr/2;
+                        else legC = c + dc/2;
+                        if (!getPieceAt(legR, legC, currentBoard)) {
+                            addMove(newR, newC);
+                        }
+                    });
+                }
+                else if (pieceType === PIECES.ROOK.red || pieceType === PIECES.ROOK.black) {
+                    const directions = [[-1,0], [1,0], [0,-1], [0,1]];
+                    directions.forEach(([dr, dc]) => {
+                        for (let i = 1; ; i++) {
+                            const newR = r + i*dr;
+                            const newC = c + i*dc;
+                            if (newR < 0 || newR >= ROWS || newC < 0 || newC >= COLS) break;
+                            const target = getPieceAt(newR, newC, currentBoard);
+                            if (target) {
+                                if (target.color !== color) addMove(newR, newC);
+                                break;
+                            }
+                            addMove(newR, newC);
+                        }
+                    });
+                }
+                else if (pieceType === PIECES.CANNON.red || pieceType === PIECES.CANNON.black) {
+                    const directions = [[-1,0], [1,0], [0,-1], [0,1]];
+                    directions.forEach(([dr, dc]) => {
+                        let jumped = false;
+                        for (let i = 1; ; i++) {
+                            const newR = r + i*dr;
+                            const newC = c + i*dc;
+                            if (newR < 0 || newR >= ROWS || newC < 0 || newC >= COLS) break;
+                            const target = getPieceAt(newR, newC, currentBoard);
+                            if (!jumped) {
+                                if (target) {
+                                    jumped = true;
+                                } else {
+                                    addCannonMove(newR, newC, false, null);
+                                }
+                            } else {
+                                if (target) {
+                                    addCannonMove(newR, newC, true, target);
+                                    break;
+                                }
+                                // Cannon cannot move to empty after jumping
+                            }
+                        }
+                    });
+                }
+                else if (pieceType === PIECES.PAWN.red || pieceType === PIECES.PAWN.black) {
+                    const forwardDir = (color === 'red') ? -1 : 1; // Red moves "up" (row index decreases)
+                    const crossedRiver = (color === 'red' && r <= 4) || (color === 'black' && r >= 5);
+
+                    addMove(r + forwardDir, c);
+                    if (crossedRiver) {
+                        addMove(r, c - 1);
+                        addMove(r, c + 1);
+                    }
+                }
+                return moves;
+            }
+
+            function findKing(color, currentBoard) {
+                const kingType = (color === 'red') ? PIECES.KING.red : PIECES.KING.black;
+                for (let r_idx = 0; r_idx < ROWS; r_idx++) {
+                    for (let c_idx = 0; c_idx < COLS; c_idx++) {
+                        const piece = getPieceAt(r_idx,c_idx,currentBoard);
+                        if (piece && piece.type === kingType && piece.color === color) {
+                            return { r: r_idx, c: c_idx };
+                        }
+                    }
+                }
+                return null;
+            }
+
+            function isKingInCheck(kingColor, currentBoard) {
+                const kingPos = findKing(kingColor, currentBoard);
+                if (!kingPos) return false;
+
+                const opponentColor = (kingColor === 'red') ? 'black' : 'red';
+                for (let r_idx = 0; r_idx < ROWS; r_idx++) {
+                    for (let c_idx = 0; c_idx < COLS; c_idx++) {
+                        const piece = getPieceAt(r_idx,c_idx,currentBoard);
+                        if (piece && piece.color === opponentColor) {
+                            const attackerMoves = getPotentialAttacksForPiece(piece, r_idx, c_idx, currentBoard);
+                            if (attackerMoves.some(move => move.r === kingPos.r && move.c === kingPos.c)) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                // Flying General check (Kings cannot face each other directly without pieces between)
+                const myKingPos = findKing(kingColor, currentBoard); // Re-fetch to be safe, though kingPos should be it
+                const otherKingPos = findKing(opponentColor, currentBoard);
+                if (myKingPos && otherKingPos && myKingPos.c === otherKingPos.c) { // Same column
+                    if (countPiecesBetween(myKingPos.r, myKingPos.c, otherKingPos.r, otherKingPos.c, currentBoard) === 0) {
+                        return true; // Kings are facing each other directly
+                    }
+                }
+                return false;
+            }
+
+            function getPotentialAttacksForPiece(piece, r, c, currentBoard) {
+                // This is a simplified version of getValidMovesForPiece, used ONLY for check detection.
+                // It does NOT include the "isKingInCheck" self-preservation logic,
+                // because we are asking "can this piece, in theory, attack square X?",
+                // not "is it a legal move for this piece to go to square X?".
+                const moves = [];
+                const pieceType = piece.type;
+                const color = piece.color;
+
+                // Simplified addMove for attack potential (no self-check)
+                function addPotentialAttack(toR, toC) {
+                    if (toR < 0 || toR >= ROWS || toC < 0 || toC >= COLS) return;
+                    const targetPiece = getPieceAt(toR, toC, currentBoard);
+                     // For attack check, it can target any square. If it's occupied by own piece (not king),
+                     // it's a block for some pieces (e.g. rook), but cannon can jump.
+                     // The 'isCapture' flag is less relevant here, we just care if it *reaches* the square.
+                    if (targetPiece && targetPiece.color === color && pieceType !== PIECES.CANNON.red && pieceType !== PIECES.CANNON.black) {
+                         // Rook, Horse, Elephant cannot move through own pieces to attack.
+                         // King, Advisor, Pawn also cannot.
+                         // Cannon is handled separately.
+                         // We are checking if *this* piece can attack the *opponent's* king.
+                         // So if `targetPiece` is same color, it's a block.
+                         // Exception: if `targetPiece` is the king being checked, then this path is valid.
+                        if (!(targetPiece.type === PIECES.KING.red || targetPiece.type === PIECES.KING.black)) {
+                             return;
+                        }
+                    }
+                    moves.push({ r: toR, c: toC });
+                }
+
+                // --- Replicate movement logic from getValidMovesForPiece but use addPotentialAttack ---
+                // (This section would be a direct copy of the movement logic from getValidMovesForPiece,
+                // replacing `addMove` with `addPotentialAttack` and `addCannonMove` with a simplified version.
+                // Due to extreme length, I will summarize the changes needed for this specific function)
+
+                // Example for ROOK:
+                if (pieceType === PIECES.ROOK.red || pieceType === PIECES.ROOK.black) {
+                    const directions = [[-1,0], [1,0], [0,-1], [0,1]];
+                    directions.forEach(([dr, dc]) => {
+                        for (let i = 1; ; i++) {
+                            const newR = r + i*dr;
+                            const newC = c + i*dc;
+                            if (newR < 0 || newR >= ROWS || newC < 0 || newC >= COLS) break;
+                            const target = getPieceAt(newR, newC, currentBoard);
+                            addPotentialAttack(newR, newC); // Rook can attack any square in its line of sight
+                            if (target) break; // Blocked for further squares in this line
+                        }
+                    });
+                }
+                // Example for CANNON (simplified for attack check):
+                else if (pieceType === PIECES.CANNON.red || pieceType === PIECES.CANNON.black) {
+                    const directions = [[-1,0], [1,0], [0,-1], [0,1]];
+                    directions.forEach(([dr, dc]) => {
+                        let jumped = false;
+                        for (let i = 1; ; i++) {
+                            const newR = r + i*dr;
+                            const newC = c + i*dc;
+                            if (newR < 0 || newR >= ROWS || newC < 0 || newC >= COLS) break;
+                            const target = getPieceAt(newR, newC, currentBoard);
+                            if (!jumped) {
+                                if (target) jumped = true;
+                                // Cannon doesn't attack empty squares by *moving* there for attack check, it needs a jump
+                            } else { // Already jumped one piece
+                                if (target) { // This is the piece it would "capture"
+                                    addPotentialAttack(newR, newC);
+                                }
+                                // An attack path for cannon must end on a piece after a jump.
+                                // If the square after jump is empty, it's not an attack path for this piece.
+                                break; // Cannon attack path ends after the first piece encountered post-jump or board edge.
+                            }
+                        }
+                    });
+                }
+                // ... (Similar logic for KING, ADVISOR, ELEPHANT, HORSE, PAWN using addPotentialAttack) ...
+                // For King, Advisor, Elephant, Horse, Pawn: the logic is almost identical to getValidMovesForPiece's
+                // movement generation, just calling addPotentialAttack.
+                // The key difference is that addPotentialAttack doesn't do a recursive self-check.
+
+                // Temporary fill for other pieces for brevity (YOU NEED TO EXPAND THIS based on getValidMovesForPiece)
+                else if (pieceType === PIECES.KING.red || pieceType === PIECES.KING.black) {const kmoves = [[-1,0],[1,0],[0,-1],[0,1]]; kmoves.forEach(([dr,dc])=>addPotentialAttack(r+dr,c+dc));}
+                else if (pieceType === PIECES.ADVISOR.red || pieceType === PIECES.ADVISOR.black) {const amoves = [[-1,-1],[-1,1],[1,-1],[1,1]]; amoves.forEach(([dr,dc])=>addPotentialAttack(r+dr,c+dc));}
+                // ...and so on for Elephant, Horse, Pawn...
+                 else if (pieceType === PIECES.ELEPHANT.red || pieceType === PIECES.ELEPHANT.black) {
+                    const elephantMoves = [[-2,-2], [-2,2], [2,-2], [2,2]];
+                    elephantMoves.forEach(([dr, dc]) => {
+                        const newR = r + dr; const newC = c + dc;
+                        const eyeR = r + dr/2; const eyeC = c + dc/2;
+                        if (isElephantInTerritory(newR, color) && !getPieceAt(eyeR, eyeC, currentBoard)) addPotentialAttack(newR, newC);
+                    });
+                }
+                else if (pieceType === PIECES.HORSE.red || pieceType === PIECES.HORSE.black) {
+                    const horseMoves = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+                    horseMoves.forEach(([dr,dc]) => {
+                        const newR = r+dr; const newC = c+dc;
+                        let legR = r, legC = c;
+                        if(Math.abs(dr)===2) legR=r+dr/2; else legC=c+dc/2;
+                        if(!getPieceAt(legR, legC, currentBoard)) addPotentialAttack(newR, newC);
+                    });
+                }
+                else if (pieceType === PIECES.PAWN.red || pieceType === PIECES.PAWN.black) {
+                    const forwardDir = (color === 'red') ? -1 : 1;
+                    const crossedRiver = (color === 'red' && r <= 4) || (color === 'black' && r >= 5);
+                    addPotentialAttack(r + forwardDir, c);
+                    if (crossedRiver) { addPotentialAttack(r, c - 1); addPotentialAttack(r, c + 1); }
+                }
+                return moves;
+            }
+
+
+            function isCheckmate(kingColor, currentBoard) {
+                if (!isKingInCheck(kingColor, currentBoard)) return false;
+
+                for (let r_idx = 0; r_idx < ROWS; r_idx++) {
+                    for (let c_idx = 0; c_idx < COLS; c_idx++) {
+                        const piece = getPieceAt(r_idx, c_idx, currentBoard);
+                        if (piece && piece.color === kingColor) {
+                            const validMoves = getValidMovesForPiece(piece, r_idx, c_idx, currentBoard);
+                            if (validMoves.length > 0) {
+                                // Test if any of these valid moves gets the king out of check
+                                for (const move of validMoves) {
+                                    const tempBoard = deepCloneBoard(currentBoard);
+                                    tempBoard[move.r][move.c] = piece;
+                                    tempBoard[r_idx][c_idx] = null;
+                                    if (!isKingInCheck(kingColor, tempBoard)) {
+                                        return false; // Found a move to escape check
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                return true;
+            }
+            
+            function isStalemate(playerColor, currentBoard) {
+                if (isKingInCheck(playerColor, currentBoard)) return false; // If in check, it's either checkmate or can escape
+
+                for (let r = 0; r < ROWS; r++) {
+                    for (let c = 0; c < COLS; c++) {
+                        const piece = getPieceAt(r, c, currentBoard);
+                        if (piece && piece.color === playerColor) {
+                            const validMoves = getValidMovesForPiece(piece, r, c, currentBoard);
+                            if (validMoves.length > 0) {
+                                return false; // Found at least one legal move
+                            }
+                        }
+                    }
+                }
+                return true; // No legal moves, and not in check
+            }
+
+
+            resetButton.addEventListener('click', initializeBoard);
+            initializeBoard(); // Initial call
+        });
+    </script>
+</body>
+</html>
